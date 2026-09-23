@@ -1,0 +1,1045 @@
+openapi: 3.0.3
+info:
+  title: Заявки на обучение
+  description: >
+    Подача, рассмотрение и согласование заявок на обучение.
+  version: 1.0.0
+
+servers:
+  - url: https://studyportal/v1
+    description: Основной сервер
+
+tags:
+  - name: Students
+    description: Учащиеся
+  - name: Tickets
+    description: Заявки на обучение
+  - name: Notifications
+    description: Уведомления
+  - name: Courses
+    description: Получение информации о курсах и отправка заявок
+
+
+paths:
+
+
+
+  /courses:
+    get:
+      operationId: getCourses
+      tags: [Courses]
+      summary: Получить список курсов
+      description: >
+        Используется для получения актуального перечня курсов из выпадающего списка "Название курса".
+        Данные синхронизируются из внешней системы.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список курсов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
+
+
+
+  /students/template:
+    get:
+      operationId: getStudentsTemplate
+      tags: [Students]
+      summary: Скачать шаблон списка участников
+      description: >
+        Возвращает xlsx-файл-шаблон для заполнения списка участников.
+        Соответствует всплывающей подсказке "Скачать шаблон списка участников"
+        на кнопке "Загрузить список" в форме заявки.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Файл-шаблон (xlsx)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /students/import:
+    post:
+      operationId: importStudents
+      tags: [Students]
+      summary: Загрузить список участников из файла Excel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Список участников из файла
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Student'
+        '422':
+          description: >
+            Файл не передан, уже загружен, неккоректный формат.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                fileMissing:
+                  $ref: '#/components/examples/ImportFileMissing'
+                fileFormatInvalid:
+                  $ref: '#/components/examples/ImportFileFormatInvalid'
+                fileAlreadyExists:
+                  $ref: '#/components/examples/FileAlreadyExists'
+
+  /tickets:
+    get:
+      operationId: getTickets
+      tags: [Tickets]
+      summary: Получить список заявок
+      description: >
+        Используется для получения списка заявок
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Фильтр по названию курса
+          schema:
+            type: string
+        - name: courseDate
+          in: query
+          description: Фильтр по дате
+          schema:
+            type: string
+        - name: ticketStatus
+          in: query
+          description: Фильтр по статусу
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список заявок
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TicketsSummary'
+    post:
+      operationId: createDraftTicket
+      tags: [Tickets]
+      summary: Создать черновик заявки
+      description: >
+        Создаёт черновик, проверяет базовые поля.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketDraft'
+            examples:
+              draft:
+                summary: Создать черновик
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseDate: "2025-12-23"
+                  status: черновик
+              draftWithStudents:
+                summary: Создать черновик с уже заполненным списком участников
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseDate: "2025-12-23"
+                  status: черновик
+                  students:
+                    - surname: Иванов
+                      name: Николай
+                      position: Ведущий специалист
+                      departmentNumber: 508
+                      email: i.ivanov@mail.ru
+                      phoneNumber: "+79515552627"
+      responses:
+        '201':
+          description: Черновик заявки создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketCreated'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                status: черновик
+        '400':
+          description: >
+            Ошибка валидации данных черновика. Какое именно поле не заполнено —
+            указано в теле ответа, см. примеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                courseIdMissing:
+                  $ref: '#/components/examples/CourseIdMissing'
+                courseDateMissing:
+                  $ref: '#/components/examples/CourseDateMissing'
+                statusMissing:
+                  $ref: '#/components/examples/TicketStatusMissing'
+                studentSurnameMissing:
+                  $ref: '#/components/examples/StudentSurnameMissing'
+                studentNameMissing:
+                  $ref: '#/components/examples/StudentNameMissing'
+                studentPositionMissing:
+                  $ref: '#/components/examples/StudentPositionMissing'
+                studentDepartmentNumberMissing:
+                  $ref: '#/components/examples/StudentDepartmentNumberMissing'
+                studentEmailMissing:
+                  $ref: '#/components/examples/StudentEmailMissing'
+                studentPhoneMissing:
+                  $ref: '#/components/examples/StudentPhoneMissing'
+
+  /tickets/submit-for-approval:
+    post:
+      operationId: createTicketForApproval
+      tags: [Tickets]
+      summary: Создать заявку
+      description: >
+        Создаёт новую заявку
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketApproval'
+            examples:
+              approval:
+                summary: Создать заявку
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseName: Пароли и аутентификация
+                  courseDate: "2025-12-23"
+                  status: согласование
+                  students:
+                    - surname: Иванов
+                      name: Николай
+                      position: Ведущий специалист
+                      departmentNumber: 508
+                      email: i.ivanov@mail.ru
+                      phoneNumber: "+79515552627"
+      responses:
+        '201':
+          description: Заявка создана и отправлена на согласование
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketCreated'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                status: согласование
+        '400':
+          description: >
+            Ошибка валидации данных заявки. Какое именно поле не заполнено —
+            указано в теле ответа, см. примеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                courseIdMissing:
+                  $ref: '#/components/examples/CourseIdMissing'
+                courseDateMissing:
+                  $ref: '#/components/examples/CourseDateMissing'
+                statusMissing:
+                  $ref: '#/components/examples/TicketStatusMissing'
+                studentsListEmpty:
+                  $ref: '#/components/examples/StudentsListEmpty'
+                studentSurnameMissing:
+                  $ref: '#/components/examples/StudentSurnameMissing'
+                studentNameMissing:
+                  $ref: '#/components/examples/StudentNameMissing'
+                studentPositionMissing:
+                  $ref: '#/components/examples/StudentPositionMissing'
+                studentDepartmentNumberMissing:
+                  $ref: '#/components/examples/StudentDepartmentNumberMissing'
+                studentEmailMissing:
+                  $ref: '#/components/examples/StudentEmailMissing'
+                studentPhoneMissing:
+                  $ref: '#/components/examples/StudentPhoneMissing'
+
+  /tickets/{ticketId}:
+    get:
+      operationId: getTicketById
+      tags: [Tickets]
+      summary: Получить заявку по id
+      description: >
+        Вызывается при клике на строку в списке заявок, а также при переходе
+        по уведомлению (см. Notification.ticketId) — уведомление хранит
+        только идентификатор заявки, а актуальные номер и статус фронт
+        получает из этого метода. Возвращает полную информацию по заявке.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: Полная карточка заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          description: Заявка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      operationId: updateTicket
+      tags: [Tickets]
+      summary: Обновить данные черновика
+      description: >
+        Полностью обновляет данные заявки (курс, дата, список участников).
+        Доступно только для заявки в статусе "черновик" — статус после обновления
+        остаётся "черновик". Для отправки на согласование используйте
+        POST /tickets/{ticketId}/submit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketDraft'
+            examples:
+              draft:
+                summary: Обновить черновик
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseDate: "2025-12-25"
+                  status: черновик
+                  students:
+                    - surname: Иванов
+                      name: Николай
+                      position: Ведущий специалист
+                      departmentNumber: 508
+                      email: i.ivanov@mail.ru
+                      phoneNumber: "+79515552627"
+      responses:
+        '200':
+          description: Черновик обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDraftView'
+        '400':
+          description: >
+            Ошибка валидации данных — конкретная причина указана в теле
+            ответа, см. примеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                courseIdMissing:
+                  $ref: '#/components/examples/CourseIdMissing'
+                courseDateMissing:
+                  $ref: '#/components/examples/CourseDateMissing'
+                statusMissing:
+                  $ref: '#/components/examples/TicketStatusMissing'
+                studentSurnameMissing:
+                  $ref: '#/components/examples/StudentSurnameMissing'
+                studentNameMissing:
+                  $ref: '#/components/examples/StudentNameMissing'
+                studentPositionMissing:
+                  $ref: '#/components/examples/StudentPositionMissing'
+                studentDepartmentNumberMissing:
+                  $ref: '#/components/examples/StudentDepartmentNumberMissing'
+                studentEmailMissing:
+                  $ref: '#/components/examples/StudentEmailMissing'
+                studentPhoneMissing:
+                  $ref: '#/components/examples/StudentPhoneMissing'
+
+    delete:
+      operationId: deleteTicket
+      tags: [Tickets]
+      summary: Удалить черновик
+      description: >
+        Удаляет заявку. Доступно только для заявки в статусе "черновик".
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '204':
+          description: Заявка удалена
+    patch:
+      operationId: updateTicketStatus
+      tags: [Tickets]
+      summary: Принять решение по заявке (согласовать / отклонить / вернуть на доработку)
+      description: >
+        Доступно согласующему для заявки в статусе "Согласование".
+        Требования к comment зависят от выбранного status:
+        для "согласована" поле не указывается, для "отклонена" оно опционально,
+        для "на доработку" обязательно.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketStatusUpdate'
+            examples:
+              approve:
+                summary: Согласовать
+                value:
+                  status: согласована
+              reject:
+                summary: Отклонить с комментарием
+                value:
+                  status: отклонена
+                  comment: Данный курс доступен для участников прошлого потока.
+              requestCorrection:
+                summary: Отправить на доработку
+                value:
+                  status: на доработку
+                  comment: В заявке присутствует дублирующий файл списка участников
+      responses:
+        '200':
+          description: Статус заявки обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDecisionResult'
+              examples:
+                approved:
+                  summary: Заявка согласована
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: согласована
+                    approvedAt: "2025-12-24T14:30:00Z"
+                rejected:
+                  summary: Заявка отклонена
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: отклонена
+                    approvedAt: null
+                sentForCorrection:
+                  summary: Заявка отправлена на доработку
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    status: на доработку
+                    approvedAt: null
+        '400':
+          description: Не заполнен обязательный комментарий при отправке на доработку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                commentMissingForCorrection:
+                  $ref: '#/components/examples/CommentMissingForCorrection'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tickets/{ticketId}/submit:
+    post:
+      operationId: submitTicket
+      tags: [Tickets]
+      summary: Доработать и отправить заявку на согласование
+      description: >
+        Отправляет на согласование заявку, находящуюся в статусе "черновик" или "на доработку"
+        (при необходимости — предварительно изменив её данные). Результат — заявка переходит
+        в статус "согласование", все участники процесса получают уведомления.
+        Для заявки в любом другом статусе метод недоступен.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content: 
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketApproval'
+            examples:
+              fromDraft:
+                summary: Отправить на согласование из черновика
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseDate: "2025-12-23"
+                  status: согласование
+                  students:
+                    - surname: Иванов
+                      name: Николай
+                      position: Ведущий специалист
+                      departmentNumber: 508
+                      email: i.ivanov@mail.ru
+                      phoneNumber: "+79515552627"
+              fromCorrection:
+                summary: Отправить на согласование после доработки
+                value:
+                  courseId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  courseDate: "2025-12-24"
+                  status: согласование
+                  students:
+                    - surname: Иванов
+                      name: Николай
+                      position: Ведущий специалист
+                      departmentNumber: 508
+                      email: i.ivanov@mail.ru
+                      phoneNumber: "+79515552627"
+      responses:
+        '200':
+          description: >
+            Заявка отправлена на согласование. Курс, дата и участники — те, что
+            только что переданы в запросе, сервер их не дублирует в ответе;
+            подтверждается только новый статус.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketCreated'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                status: согласование
+        '400':
+          description: >
+            Ошибка валидации данных — конкретная причина указана в теле
+            ответа, см. примеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                courseIdMissing:
+                  $ref: '#/components/examples/CourseIdMissing'
+                courseDateMissing:
+                  $ref: '#/components/examples/CourseDateMissing'
+                studentsListEmpty:
+                  $ref: '#/components/examples/StudentsListEmpty'
+                studentSurnameMissing:
+                  $ref: '#/components/examples/StudentSurnameMissing'
+                studentNameMissing:
+                  $ref: '#/components/examples/StudentNameMissing'
+                studentPositionMissing:
+                  $ref: '#/components/examples/StudentPositionMissing'
+                studentDepartmentNumberMissing:
+                  $ref: '#/components/examples/StudentDepartmentNumberMissing'
+                studentEmailMissing:
+                  $ref: '#/components/examples/StudentEmailMissing'
+                studentPhoneMissing:
+                  $ref: '#/components/examples/StudentPhoneMissing'
+
+  /notifications/me:
+    get:
+      operationId: getNotifications
+      tags: [Notifications]
+      summary: Получить список уведомлений текущего пользователя
+      description: Предоставляет список уведомлений
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список уведомлений
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+
+  /notifications/{notificationId}:
+    patch:
+      operationId: markNotificationRead
+      tags: [Notifications]
+      summary: Отметить уведомление прочитанным
+      description: Переводит уведомление в статус "Прочитано". Доступно только получателю уведомления.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationStatusUpdate'
+            examples:
+              markRead:
+                summary: Отметить прочитанным
+                value:
+                  status: Прочитано
+      responses:
+        '204':
+          description: Уведомление помечено прочитанным
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+
+    TicketId:
+      name: ticketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  examples:
+
+    # --- Незаполненные поля заявки ---
+    CourseIdMissing:
+      summary: Не указан курс
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Название курса" обязательно для заполнения
+
+    CourseDateMissing:
+      summary: Не указана дата начала курса
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Дата начала курса" обязательно для заполнения
+
+    TicketStatusMissing:
+      summary: Не указан статус заявки
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Статус" обязательно для заполнения
+
+    StudentsListEmpty:
+      summary: Список участников пуст
+      value:
+        code: VALIDATION_ERROR
+        message: Для отправки на согласование нужно указать хотя бы одного участника
+
+    # --- Незаполненные поля участника (Student) ---
+    StudentSurnameMissing:
+      summary: Не указана фамилия участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Фамилия" обязательно для заполнения для каждого участника
+
+    StudentNameMissing:
+      summary: Не указано имя участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Имя" обязательно для заполнения для каждого участника
+
+    StudentPositionMissing:
+      summary: Не указана должность участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Должность" обязательно для заполнения для каждого участника
+
+    StudentDepartmentNumberMissing:
+      summary: Не указан номер подразделения участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Номер подразделения" обязательно для заполнения для каждого участника
+
+    StudentEmailMissing:
+      summary: Не указана эл. почта участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Эл. почта" обязательно для заполнения для каждого участника
+
+    StudentPhoneMissing:
+      summary: Не указан телефон участника
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Телефон" обязательно для заполнения для каждого участника
+
+    # --- Решение по заявке (согласовать / отклонить / на доработку) ---
+    CommentMissingForCorrection:
+      summary: Не указан комментарий
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Комментарий" обязательно для заполнения при отправке на доработку
+
+    # --- Импорт участников из файла ---
+    ImportFileMissing:
+      summary: Файл не передан
+      value:
+        code: VALIDATION_ERROR
+        message: Поле "Файл" обязательно для заполнения
+
+    ImportFileFormatInvalid:
+      summary: Некорректный формат файла
+      value:
+        code: VALIDATION_ERROR
+        message: Файл должен быть в формате .xlsx и соответствовать шаблону
+        
+    FileAlreadyExists:
+      summary: Данный файл уже загружен
+      value:
+        code: VALIDATION_ERROR
+        message: Данный файл уже загружен
+
+  schemas:
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+          enum: [VALIDATION_ERROR, NOT_FOUND, INTERNAL_ERROR]
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки для отображения пользователю
+          example: Поле "Название курса" обязательно для заполнения
+
+    Course:
+      type: object
+      properties:
+        courseName:
+          type: string
+          description: Выберите название
+          example: Пароли и аутентификация
+        courseDate:
+          type: string
+          format: date
+          description: Выберите дату
+          example: "2026-01-01"       
+
+    UserShort:
+      type: object
+      description: Краткая информация о пользователе — только ФИО, без остальных персональных данных.
+      properties:
+        id:
+          type: string
+          format: uuid
+        surname:
+          type: string
+          example: Иванов
+        name:
+          type: string
+          example: Николай
+        middleName:
+          type: string
+          example: Андреевич
+          nullable: true
+
+    Student:
+      type: object
+      required: [surname, name, position, departmentNumber, email, phoneNumber]
+      properties:
+        surname:
+          type: string
+          example: Иванов
+        name:
+          type: string
+          example: Николай
+        middleName:
+          type: string
+          example: Андреевич
+          nullable: true
+        position:
+          type: string
+          example: Ведущий специалист
+        departmentNumber:
+          type: integer
+          example: 508
+        email:
+          type: string
+          format: email
+          example: s.petrov@mail.ru
+        phoneNumber:
+          type: string
+          example: "+79515552627"
+
+    TicketInputBase:
+      type: object
+      required: [courseId, courseDate]
+      properties:
+        courseId:
+          type: string
+          format: uuid
+        courseName:
+          type: string
+        courseDate:
+          type: string
+          format: date
+          example: "2025-12-23"
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/Student'
+
+    TicketApproval:
+      description: Перевод заявки в статус "Согласование".
+      allOf:
+        - $ref: '#/components/schemas/TicketInputBase'
+        - type: object
+          required: [status, students]
+          properties:
+            status:
+              type: string
+              enum: [согласование]
+            students:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/Student'
+              description: Для отправки на согласование список участников не должен быть пустым.
+
+    TicketDraft:
+      description: Перевод заявки в статус "Черновик".
+      allOf:
+        - $ref: '#/components/schemas/TicketInputBase'
+        - type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [черновик]
+
+    TicketsSummary:
+      type: object
+      required: [id, number, courseName, courseDate, creator, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [согласование, согласована, отклонена, на доработку, черновик]
+        courseName:
+          type: string
+          example: Пароли и аутентификация
+        courseDate:
+          type: string
+          format: date
+          example: "2025-12-23"
+        creator:
+          $ref: '#/components/schemas/UserShort'
+
+    TicketDraftView:
+      description: >
+        Заявка в статусе "черновик". У черновика нет согласующего, даты решения
+        и комментария — заявка ещё ни разу не отправлялась на согласование,
+        поэтому этих данных просто не существует.
+      allOf:
+        - $ref: '#/components/schemas/TicketsSummary'
+        - type: object
+          required: [students]
+          properties:
+            students:
+              type: array
+              items:
+                $ref: '#/components/schemas/Student'
+
+    Ticket:
+      allOf:
+        - $ref: '#/components/schemas/TicketsSummary'
+        - type: object
+          required: [students]
+          properties:
+            approver:
+              $ref: '#/components/schemas/UserShort'
+            approvedAt:
+              type: string
+              format: date-time
+              nullable: true
+              example: "2025-12-24T14:30:00Z"
+            comment:
+              type: string
+              nullable: true
+              description: комментарий появится при просмотре заявки из статуса "на доработку" и "отклонена"
+            students:
+              type: array
+              items:
+                $ref: '#/components/schemas/Student'
+
+
+  
+    Notification:
+      type: object
+      required: [id, ticketId, theme, text, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        theme:
+          $ref: '#/components/schemas/ThemeNotification'
+        text:
+          type: string
+          maxLength: 1024
+        status:
+          type: string
+          enum: [Отправлено, Прочитано]
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ThemeNotification:
+      type: object
+      required: [themeId, themeName, themeNumber]
+      properties:
+        themeId:
+          type: string
+          format: uuid
+        themeName:
+          type: string
+          maxLength: 100
+        themeNumber:
+          type: integer
+
+    NotificationStatusUpdate:
+      type: object
+      description: Перевод уведомления в статус "Прочитано".
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [Прочитано]
+
+    TicketCreated:
+      type: object
+      description: >
+        Результат создания заявки. Заявитель сам только что ввёл курс, дату
+        и участников — сервер не отправляет эти данные обратно, а
+        подтверждает только то, что реально сгенерировано на его стороне:
+        идентификатор заявки и статус, в котором она была создана.
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор созданной заявки — используйте для GET /tickets/{ticketId}
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        status:
+          type: string
+          enum: [черновик, согласование]
+
+    TicketDecisionResult:
+      type: object
+      description: >
+        Результат принятия решения по заявке. Согласующий уже видит полную
+        карточку заявки на экране, поэтому сервер подтверждает только то,
+        что реально изменилось: новый статус и, при согласовании, момент
+        принятия решения. Курс, участники и автор заявки не меняются этим
+        методом и в ответе не дублируются.
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        status:
+          type: string
+          enum: [согласована, отклонена, на доработку]
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Заполняется только при status "согласована" — момент принятия решения сервером.
+          example: "2025-12-24T14:30:00Z"
+
+    TicketApprove:
+      type: object
+      description: Перевод заявки в статус "Согласована". Комментарий не предусмотрен.
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [согласована]
+
+    TicketReject:
+      type: object
+      description: Перевод заявки в статус "Отклонена". Комментарий необязателен.
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [отклонена]
+        comment:
+          type: string
+          example: Данный курс доступен для участников прошлого потока.
+
+    TicketUpdateCorrection:
+      type: object
+      description: Перевод заявки в статус "На доработку". Комментарий обязателен.
+      required: [status, comment]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: ["на доработку"]
+        comment:
+          type: string
+          example: В заявке присутствует дублирующий файл списка участников
+
+    TicketStatusUpdate:
+      description: >
+        Тело запроса на изменение статуса заявки. Конкретный набор допустимых полей
+        определяется значением status: см. TicketApprove, TicketReject, TicketUpdateCorrection.
+      oneOf:
+        - $ref: '#/components/schemas/TicketApprove'
+        - $ref: '#/components/schemas/TicketReject'
+        - $ref: '#/components/schemas/TicketUpdateCorrection'
+      discriminator:
+        propertyName: status
+        mapping:
+          согласована: '#/components/schemas/TicketApprove'
+          отклонена: '#/components/schemas/TicketReject'
+          на доработку: '#/components/schemas/TicketUpdateCorrection'
